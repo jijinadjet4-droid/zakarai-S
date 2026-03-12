@@ -1008,7 +1008,10 @@
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
         
         const page = document.getElementById(pageName + '-page');
-        if (page) page.classList.add('active-page');
+        if (page) {
+            page.classList.add('active-page');
+            console.log("انتقلنا إلى صفحة:", pageName);
+        }
 
         document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
         const navItem = document.getElementById('nav-' + pageName);
@@ -1125,7 +1128,7 @@
     }
 
     /* ===========================
-       إضافة خبر جديد (مصحح بالكامل)
+       إضافة خبر جديد
     =========================== */
     document.getElementById('newsForm').addEventListener('submit', async function(e){
         e.preventDefault();
@@ -1145,12 +1148,15 @@
         }
 
         try {
+            alert("جاري تحميل الصور... قد يستغرق دقيقة");
+            
             // تحويل الصور لـ Base64
             const base64Images = await Promise.all(files.map(fileToBase64));
             
             // إرسال للـ Google Sheets
             const response = await fetch(newsUrl, {
                 method: "POST",
+                mode: "no-cors", // مهم لتفادي مشاكل CORS
                 headers: {
                     "Content-Type": "application/json",
                 },
@@ -1161,28 +1167,18 @@
                 })
             });
             
-            // محاولة قراءة الرد
-            let result;
-            try {
-                result = await response.json();
-            } catch(e) {
-                console.log("الرد مش JSON، لكن يمكن الخبر تزاد");
-                result = { success: true };
-            }
-            
-            alert("✅ تم إضافة الخبر بنجاح وسيظهر للجميع");
+            alert("✅ تم إضافة الخبر بنجاح");
             this.reset();
             
-            // تأخير بسيط ثم تحميل الأخبار
+            // تأخير ثم تحميل الأخبار
             setTimeout(() => {
                 loadNews();
-                // الرجوع لصفحة الأخبار
                 showPage('news');
-            }, 1500);
+            }, 2000);
             
         } catch(error) {
             console.error("خطأ:", error);
-            alert("❌ حدث خطأ أثناء إضافة الخبر. تحقق من وحدة التحكم للمزيد من التفاصيل.");
+            alert("❌ حدث خطأ: " + error.message);
         }
     });
 
@@ -1192,27 +1188,29 @@
     async function loadNews() {
         try {
             console.log("جاري تحميل الأخبار...");
+            
+            // نجيب البيانات من Google Sheets
             const response = await fetch(newsUrl + '?t=' + Date.now());
             const data = await response.json();
             
-            console.log("تم تحميل البيانات:", data);
+            console.log("البيانات المحملة:", data);
             
+            // نخزن البيانات في المصفوفة
             if (Array.isArray(data)) {
                 newsList = data;
-                displayAllNews();
+            } else if (data && data.news && Array.isArray(data.news)) {
+                newsList = data.news;
             } else {
-                console.log("البيانات المستلمة:", data);
-                // إذا كانت البيانات موش مصفوفة، نحولوها
-                if (data && typeof data === 'object') {
-                    const possibleArray = Object.values(data);
-                    if (Array.isArray(possibleArray)) {
-                        newsList = possibleArray;
-                        displayAllNews();
-                    }
-                }
+                newsList = [];
             }
+            
+            // نعرض الأخبار
+            displayAllNews();
+            
         } catch(error) {
             console.error("خطأ في تحميل الأخبار:", error);
+            // حتى لو فشل التحميل، نعرض الأخبار الثابتة
+            displayAllNews();
         }
     }
 
@@ -1248,26 +1246,29 @@
         const newsGrid = document.getElementById('news-grid');
         newsGrid.innerHTML = '';
         
-        console.log("عرض الأخبار:", newsList.length);
+        console.log("عرض الأخبار:", newsList ? newsList.length : 0);
         
-        // 1. عرض الأخبار من Google Sheets
+        // 1. عرض الأخبار من Google Sheets (إذا كان في أخبار)
         if (newsList && newsList.length > 0) {
             newsList.forEach(news => {
-                // التأكد من وجود images
-                const images = news.images || [];
-                const firstImage = images.length > 0 ? images[0] : 'https://via.placeholder.com/300x200?text=صورة';
+                // نحدد الصورة الأولى أو صورة افتراضية
+                let firstImage = 'https://via.placeholder.com/300x200?text=' + encodeURIComponent(news.title || 'خبر');
+                
+                if (news.images && news.images.length > 0) {
+                    firstImage = news.images[0];
+                }
                 
                 const card = createNewsCard(
                     news.title || 'بدون عنوان',
                     firstImage,
                     'fas fa-newspaper',
-                    () => showNewsDetails(news.title || 'خبر', news.description || '', images)
+                    () => showNewsDetails(news.title || 'خبر', news.description || '', news.images || [])
                 );
                 newsGrid.appendChild(card);
             });
         }
         
-        // 2. عرض خبر ختان جماعي
+        // 2. عرض خبر ختان جماعي (ثابت)
         newsGrid.appendChild(createNewsCard(
             'ختان جماعي الدفعة الأولى',
             'photo_5870672372229147944_x.jpg',
@@ -1275,7 +1276,7 @@
             showKhitanDetails
         ));
         
-        // 3. عرض خبر إفطار صائم
+        // 3. عرض خبر إفطار صائم (ثابت)
         newsGrid.appendChild(createNewsCard(
             'إفطار صائم',
             'photo_5870672372229147945_x.jpg',
@@ -1334,7 +1335,7 @@
         
         showNewsDetails(
             "ختان جماعي الدفعة الأولى",
-            "ختان جماعي للأطفال المعوزين نظمته اللجنة المحلية للهلال الأحمر الجزائري بريزينة",
+            "ختان جماعي للأطفال نظمته اللجنة المحلية للهلال الأحمر الجزائري بريزينة",
             images
         );
     }
@@ -1370,12 +1371,13 @@
     /* ===========================
        تحميل الصفحة
     =========================== */
-    window.onload = () => {
-        console.log("تم تحميل الصفحة، جلب الأخبار...");
-        loadNews(); // تحميل الأخبار
-        setInterval(loadNews, 30000); // تحديث كل 30 ثانية
+    window.onload = function() {
+        console.log("تم تحميل الصفحة");
+        loadNews();
+        setInterval(loadNews, 60000); // تحديث كل دقيقة
     };
 </script>
 </body>
 </html>
+
 
