@@ -987,42 +987,28 @@
     </footer>
 <script>
     // ===========================
+    // رابط Google Sheets الجديد
+    // ===========================
+    const newsUrl = "https://script.google.com/macros/s/AKfycbyrIkrxt8gEnQJ4WaHLOR2r7bAlQs6dxpoulDXFsqv_uVyQCBt65uSol0qDeWB9lpeP/exec";
+
+    // ===========================
     // متغيرات عامة
     // ===========================
     let clickCount = 0;
     const adminPassword = "20040331";
     let isAdmin = false;
 
-    // مفتاح التخزين المحلي
-    const STORAGE_KEY = 'crc_brezina_news';
-
-    /* ===========================
-       التخزين المحلي - حفظ وجلب الأخبار
-    =========================== */
-    function saveNewsToStorage(newsArray) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newsArray));
-    }
-
-    function loadNewsFromStorage() {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        return stored ? JSON.parse(stored) : [];
-    }
-
-    // مصفوفة الأخبار المحلية
-    let localNews = loadNewsFromStorage();
+    // مصفوفة الأخبار
+    let newsList = [];
 
     /* ===========================
        التنقل بين الصفحات
     =========================== */
     function showPage(pageName) {
-        console.log('ننتقل إلى صفحة:', pageName);
-        
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
         
         const page = document.getElementById(pageName + '-page');
-        if (page) {
-            page.classList.add('active-page');
-        }
+        if (page) page.classList.add('active-page');
 
         document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
         const navItem = document.getElementById('nav-' + pageName);
@@ -1067,12 +1053,19 @@
     =========================== */
     document.getElementById('registrationForm').addEventListener('submit', function(e) {
         e.preventDefault();
+        
         const phone = document.querySelector('input[name="phone"]').value;
         const phoneRegex = /^(05|06|07)[0-9]{8}$/;
-        if (!phoneRegex.test(phone)) { alert('رقم الهاتف غير صحيح'); return; }
+        if (!phoneRegex.test(phone)) { 
+            alert('رقم الهاتف غير صحيح'); 
+            return; 
+        }
 
         const experienceSelected = document.querySelector('input[name="volunteerExperience"]:checked');
-        if (!experienceSelected) { alert('اختر هل لديك خبرة أم لا'); return; }
+        if (!experienceSelected) { 
+            alert('اختر هل لديك خبرة أم لا'); 
+            return; 
+        }
 
         const data = {
             name: document.querySelector('input[name="fullname"]').value,
@@ -1089,8 +1082,14 @@
             method: "POST",
             body: JSON.stringify(data)
         })
-        .then(res => { openConfirmationModal(); document.getElementById("registrationForm").reset(); })
-        .catch(err => { alert("حدث خطأ أثناء الإرسال"); console.error(err); });
+        .then(res => { 
+            openConfirmationModal(); 
+            document.getElementById("registrationForm").reset(); 
+        })
+        .catch(err => { 
+            alert("حدث خطأ أثناء الإرسال"); 
+            console.error(err); 
+        });
     });
 
     /* ===========================
@@ -1104,8 +1103,10 @@
                 document.getElementById("admin-section").style.display = "block";
                 isAdmin = true;
                 alert("مرحباً بك رئيس اللجنة");
-                displayAllNews();
-            } else { alert("كلمة السر غير صحيحة"); }
+                loadNews();
+            } else { 
+                alert("كلمة السر غير صحيحة"); 
+            }
             clickCount = 0;
         }
         setTimeout(() => { clickCount = 0; }, 2000);
@@ -1124,7 +1125,7 @@
     }
 
     /* ===========================
-       إضافة خبر جديد
+       إضافة خبر جديد (لـ Google Sheets)
     =========================== */
     document.getElementById('newsForm').addEventListener('submit', async function(e){
         e.preventDefault();
@@ -1144,22 +1145,28 @@
         }
 
         try {
+            // تحويل الصور لـ Base64
             const base64Images = await Promise.all(files.map(fileToBase64));
             
-            const newsItem = {
-                id: Date.now(),
-                title: title,
-                description: description,
-                images: base64Images,
-                date: new Date().toLocaleDateString('ar-DZ')
-            };
+            // إرسال للـ Google Sheets
+            await fetch(newsUrl, {
+                method: "POST",
+                mode: "no-cors", // مهم لـ Google Apps Script
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    title: title,
+                    description: description,
+                    images: base64Images
+                })
+            });
             
-            localNews.unshift(newsItem);
-            saveNewsToStorage(localNews);
-            
-            displayAllNews();
+            alert("✅ تم إضافة الخبر بنجاح وسيظهر للجميع");
             this.reset();
-            alert("✅ تم إضافة الخبر بنجاح");
+            
+            // انتظر شوية ثم حمل الأخبار
+            setTimeout(loadNews, 2000);
             
         } catch(error) {
             console.error("خطأ:", error);
@@ -1168,20 +1175,26 @@
     });
 
     /* ===========================
-       حذف خبر
+       تحميل الأخبار من Google Sheets
     =========================== */
-    function deleteNews(newsId) {
-        if(confirm("هل تريد حذف هذا الخبر؟")) {
-            localNews = localNews.filter(news => news.id !== newsId);
-            saveNewsToStorage(localNews);
-            displayAllNews();
+    async function loadNews() {
+        try {
+            const response = await fetch(newsUrl + '?t=' + Date.now());
+            const data = await response.json();
+            
+            if (Array.isArray(data)) {
+                newsList = data;
+                displayAllNews();
+            }
+        } catch(error) {
+            console.error("خطأ في تحميل الأخبار:", error);
         }
     }
 
     /* ===========================
        إنشاء بطاقة خبر
     =========================== */
-    function createNewsCard(title, imgSrc, iconClass, clickHandler, newsId = null) {
+    function createNewsCard(title, imgSrc, iconClass, clickHandler) {
         const card = document.createElement('div');
         card.className = 'icon-card';
 
@@ -1198,21 +1211,7 @@
 
         card.appendChild(img);
         card.appendChild(content);
-        
-        // الحدث الرئيسي للبطاقة
         card.onclick = clickHandler;
-        
-        // زر الحذف للرئيس
-        if(isAdmin && newsId) {
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = '✕';
-            deleteBtn.className = 'delete-btn';
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation();
-                deleteNews(newsId);
-            };
-            card.appendChild(deleteBtn);
-        }
         
         return card;
     }
@@ -1224,14 +1223,13 @@
         const newsGrid = document.getElementById('news-grid');
         newsGrid.innerHTML = '';
         
-        // 1. عرض الأخبار المحفوظة
-        localNews.forEach(news => {
+        // 1. عرض الأخبار من Google Sheets
+        newsList.forEach(news => {
             const card = createNewsCard(
                 news.title,
-                news.images[0],
+                news.images && news.images[0] ? news.images[0] : 'https://via.placeholder.com/300x200?text=صورة',
                 'fas fa-newspaper',
-                () => showNewsDetails(news.title, news.description, news.images),
-                news.id
+                () => showNewsDetails(news.title, news.description, news.images || [])
             );
             newsGrid.appendChild(card);
         });
@@ -1290,21 +1288,22 @@
        الأخبار الثابتة
     =========================== */
     function showKhitanDetails() {
-    const images = [
-        'photo_5870672372229147940_y.jpg',
-        'photo_5870672372229147952_y.jpg',
-        'photo_5870672372229147954_y.jpg',
-        'photo_5870672372229147953_x.jpg',
-        'photo_5870672372229147941_x.jpg',
-        'photo_5870672372229147943_x.jpg'
-    ];  // <---- هنا كان ناقص القوسين ] 
-    
-    showNewsDetails(
-        "ختان جماعي الدفعة الأولى",
-        "", // النص تاع الوصف
-        images
-    );
-}
+        const images = [
+            'photo_5870672372229147940_y.jpg',
+            'photo_5870672372229147952_y.jpg',
+            'photo_5870672372229147954_y.jpg',
+            'photo_5870672372229147953_x.jpg',
+            'photo_5870672372229147941_x.jpg',
+            'photo_5870672372229147943_x.jpg'
+        ];
+        
+        showNewsDetails(
+            "ختان جماعي الدفعة الأولى",
+            "", // فاضي
+            images
+        );
+    }
+
     function showIftarDetails() {
         const images = [
             'photo_5870672372229147947_x.jpg',
@@ -1337,10 +1336,9 @@
        تحميل الصفحة
     =========================== */
     window.onload = () => {
-        console.log('تم تحميل الصفحة');
-        displayAllNews();
+        loadNews(); // تحميل الأخبار
+        setInterval(loadNews, 30000); // تحديث كل 30 ثانية
     };
 </script>
-
 </body>
 </html>
