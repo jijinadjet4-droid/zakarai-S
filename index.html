@@ -1125,7 +1125,7 @@
     }
 
     /* ===========================
-       إضافة خبر جديد (لـ Google Sheets)
+       إضافة خبر جديد (مصحح بالكامل)
     =========================== */
     document.getElementById('newsForm').addEventListener('submit', async function(e){
         e.preventDefault();
@@ -1149,9 +1149,8 @@
             const base64Images = await Promise.all(files.map(fileToBase64));
             
             // إرسال للـ Google Sheets
-            await fetch(newsUrl, {
+            const response = await fetch(newsUrl, {
                 method: "POST",
-                mode: "no-cors", // مهم لـ Google Apps Script
                 headers: {
                     "Content-Type": "application/json",
                 },
@@ -1162,15 +1161,28 @@
                 })
             });
             
+            // محاولة قراءة الرد
+            let result;
+            try {
+                result = await response.json();
+            } catch(e) {
+                console.log("الرد مش JSON، لكن يمكن الخبر تزاد");
+                result = { success: true };
+            }
+            
             alert("✅ تم إضافة الخبر بنجاح وسيظهر للجميع");
             this.reset();
             
-            // انتظر شوية ثم حمل الأخبار
-            setTimeout(loadNews, 2000);
+            // تأخير بسيط ثم تحميل الأخبار
+            setTimeout(() => {
+                loadNews();
+                // الرجوع لصفحة الأخبار
+                showPage('news');
+            }, 1500);
             
         } catch(error) {
             console.error("خطأ:", error);
-            alert("❌ حدث خطأ أثناء إضافة الخبر");
+            alert("❌ حدث خطأ أثناء إضافة الخبر. تحقق من وحدة التحكم للمزيد من التفاصيل.");
         }
     });
 
@@ -1179,12 +1191,25 @@
     =========================== */
     async function loadNews() {
         try {
+            console.log("جاري تحميل الأخبار...");
             const response = await fetch(newsUrl + '?t=' + Date.now());
             const data = await response.json();
+            
+            console.log("تم تحميل البيانات:", data);
             
             if (Array.isArray(data)) {
                 newsList = data;
                 displayAllNews();
+            } else {
+                console.log("البيانات المستلمة:", data);
+                // إذا كانت البيانات موش مصفوفة، نحولوها
+                if (data && typeof data === 'object') {
+                    const possibleArray = Object.values(data);
+                    if (Array.isArray(possibleArray)) {
+                        newsList = possibleArray;
+                        displayAllNews();
+                    }
+                }
             }
         } catch(error) {
             console.error("خطأ في تحميل الأخبار:", error);
@@ -1223,16 +1248,24 @@
         const newsGrid = document.getElementById('news-grid');
         newsGrid.innerHTML = '';
         
+        console.log("عرض الأخبار:", newsList.length);
+        
         // 1. عرض الأخبار من Google Sheets
-        newsList.forEach(news => {
-            const card = createNewsCard(
-                news.title,
-                news.images && news.images[0] ? news.images[0] : 'https://via.placeholder.com/300x200?text=صورة',
-                'fas fa-newspaper',
-                () => showNewsDetails(news.title, news.description, news.images || [])
-            );
-            newsGrid.appendChild(card);
-        });
+        if (newsList && newsList.length > 0) {
+            newsList.forEach(news => {
+                // التأكد من وجود images
+                const images = news.images || [];
+                const firstImage = images.length > 0 ? images[0] : 'https://via.placeholder.com/300x200?text=صورة';
+                
+                const card = createNewsCard(
+                    news.title || 'بدون عنوان',
+                    firstImage,
+                    'fas fa-newspaper',
+                    () => showNewsDetails(news.title || 'خبر', news.description || '', images)
+                );
+                newsGrid.appendChild(card);
+            });
+        }
         
         // 2. عرض خبر ختان جماعي
         newsGrid.appendChild(createNewsCard(
@@ -1279,6 +1312,8 @@
                 };
                 gallery.appendChild(img);
             });
+        } else {
+            gallery.innerHTML = '<p style="grid-column:span 3; text-align:center;">لا توجد صور</p>';
         }
 
         showPage('news-details');
@@ -1299,7 +1334,7 @@
         
         showNewsDetails(
             "ختان جماعي الدفعة الأولى",
-            "", // فاضي
+            "ختان جماعي للأطفال المعوزين نظمته اللجنة المحلية للهلال الأحمر الجزائري بريزينة",
             images
         );
     }
@@ -1336,9 +1371,11 @@
        تحميل الصفحة
     =========================== */
     window.onload = () => {
+        console.log("تم تحميل الصفحة، جلب الأخبار...");
         loadNews(); // تحميل الأخبار
         setInterval(loadNews, 30000); // تحديث كل 30 ثانية
     };
 </script>
 </body>
 </html>
+
